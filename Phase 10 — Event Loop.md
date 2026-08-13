@@ -1,66 +1,880 @@
-<h1 align="center">JavaScript A→Z Revision</h1>
-<p align="center"><b>Phase 10 — Event Loop ⭐⭐⭐⭐</b></p>
+# JavaScript A→Z Revision
 
-<p align="center">
-  <img src="https://img.shields.io/badge/JavaScript-ES2023-F7DF1E?logo=javascript&logoColor=black" />
-  <img src="https://img.shields.io/badge/Phase-10%20of%20N-blue" />
-  <img src="https://img.shields.io/badge/Priority-Output%20Prediction%20Mastery-critical" />
-</p>
+## Phase 10 — Event Loop ⭐⭐⭐⭐
 
-> This phase is 80% practice. Read the rules once, then grind the output-prediction questions until you stop getting them wrong.
+> **Goal:** Understand how the JavaScript Event Loop schedules synchronous code, microtasks, tasks, Promise callbacks, timers, and browser rendering—and confidently predict asynchronous output.
 
-## 📑 Contents
-- [The Core Rule](#the-core-rule)
-- [Worked Example](#worked-example)
-- [1. Microtasks vs Macrotasks](#1-microtasks-vs-macrotasks)
-- [2. `setTimeout`](#2-settimeout)
-- [3. `setInterval`](#3-setinterval)
-- [4. `queueMicrotask`](#4-queuemicrotask)
-- [5. Rendering — where it fits in](#5-rendering--where-it-fits-in)
-- [6. Full Browser Event Loop Diagram](#6-full-browser-event-loop-diagram)
-- [🧪 Output Prediction Practice](#-output-prediction-practice)
+**Importance:** ⭐⭐⭐⭐⭐  
+**Difficulty:** Intermediate → Advanced  
+**Interview Relevance:** Extremely High
+
+> ⚠️ **Important:** The Event Loop is not what makes JavaScript itself multi-threaded. JavaScript execution is single-threaded, while the browser runtime provides APIs, queues, and scheduling mechanisms that allow asynchronous work to be coordinated.
 
 ---
 
-## The Core Rule
+## 📚 Contents
 
-1. Run **all** synchronous code first (call stack empties).
-2. Drain the **entire microtask queue** — including any new microtasks added while draining. Microtask queue must be **fully empty** before moving on.
-3. Run **one** macrotask from the macrotask queue.
-4. Go back to step 2. Repeat forever.
-
-**Priority order:** `sync code` → `all microtasks (fully drained, even newly added ones)` → `one macrotask` → `all microtasks again` → `one macrotask` → ...
+1. [Why the Event Loop Exists](#1-why-the-event-loop-exists)
+2. [JavaScript Execution Model](#2-javascript-execution-model)
+3. [Call Stack](#3-call-stack)
+4. [Browser Runtime and Web APIs](#4-browser-runtime-and-web-apis)
+5. [Task Queue](#5-task-queue)
+6. [Microtask Queue](#6-microtask-queue)
+7. [Macrotasks / Tasks](#7-macrotasks--tasks)
+8. [Event Loop](#8-event-loop)
+9. [Basic Execution Order](#9-basic-execution-order)
+10. [Promise Callbacks](#10-promise-callbacks)
+11. [setTimeout](#11-settimeout)
+12. [setInterval](#12-setinterval)
+13. [queueMicrotask](#13-queuemicrotask)
+14. [Microtasks vs Macrotasks](#14-microtasks-vs-macrotasks)
+15. [Browser Rendering](#15-browser-rendering)
+16. [Event Loop and Rendering](#16-event-loop-and-rendering)
+17. [Complete Browser Event Loop Model](#17-complete-browser-event-loop-model)
+18. [Output-Based Questions](#18-output-based-questions)
+19. [Output Question 1](#19-output-question-1)
+20. [Output Question 2](#20-output-question-2)
+21. [Output Question 3](#21-output-question-3)
+22. [Output Question 4](#22-output-question-4)
+23. [Output Question 5](#23-output-question-5)
+24. [Output Question 6](#24-output-question-6)
+25. [Output Question 7](#25-output-question-7)
+26. [Output Question 8](#26-output-question-8)
+27. [Output Question 9](#27-output-question-9)
+28. [Output Question 10](#28-output-question-10)
+29. [Nested Microtasks](#29-nested-microtasks)
+30. [Nested setTimeout](#30-nested-settimeout)
+31. [Common Event Loop Mistakes](#31-common-event-loop-mistakes)
+32. [Interview-Level Mental Model](#32-interview-level-mental-model)
+33. [Quick Revision](#33-quick-revision)
+34. [Interview Questions](#34-interview-questions)
 
 ---
 
-## Worked Example
+# 1. Why the Event Loop Exists
+
+JavaScript executes code using a **single Call Stack**.
+
+If JavaScript waited synchronously for every slow operation:
+
+```text
+Network request
+Database request
+Timer
+File operation
+User interaction
+```
+
+the application could become unresponsive.
+
+Instead, the runtime allows asynchronous operations to be handled outside the JavaScript execution stack and schedules their callbacks for later execution.
+
+Simplified:
+
+```text
+JavaScript
+    ↓
+Call Stack
+    ↓
+Runtime APIs
+    ↓
+Queues
+    ↓
+Event Loop
+    ↓
+Call Stack
+```
+
+The Event Loop coordinates when queued work can execute.
+
+---
+
+# 2. JavaScript Execution Model
+
+A useful browser model is:
+
+```text
+                 JavaScript Engine
+                       │
+                       ▼
+                 ┌───────────┐
+                 │Call Stack │
+                 └─────┬─────┘
+                       │
+                       │
+              Browser Runtime
+                       │
+       ┌───────────────┼───────────────┐
+       ▼               ▼               ▼
+    Timers           DOM            Network
+       │               │               │
+       └───────────────┼───────────────┘
+                       ▼
+                    Queues
+                       │
+                       ▼
+                  Event Loop
+                       │
+                       ▼
+                 Call Stack
+```
+
+The important components are:
+
+- Call Stack
+- Browser APIs
+- Microtask Queue
+- Task Queue
+- Event Loop
+- Rendering pipeline
+
+---
+
+# 3. Call Stack
+
+## Definition
+
+The Call Stack keeps track of currently executing JavaScript functions.
+
+It follows:
+
+```text
+LIFO
+Last In → First Out
+```
+
+Example:
+
+```js
+function first() {
+  second();
+}
+
+function second() {
+  console.log("Hello");
+}
+
+first();
+```
+
+Execution:
+
+```text
+first()
+  ↓
+second()
+  ↓
+console.log()
+```
+
+Conceptually:
+
+```text
+┌───────────────┐
+│ console.log() │
+├───────────────┤
+│ second()      │
+├───────────────┤
+│ first()       │
+└───────────────┘
+```
+
+When a function finishes, it is removed from the stack.
+
+---
+
+# 4. Browser Runtime and Web APIs
+
+The JavaScript engine does not directly implement every browser capability.
+
+The browser provides APIs such as:
+
+```js
+setTimeout()
+
+setInterval()
+
+fetch()
+
+addEventListener()
+
+document.querySelector()
+
+localStorage
+```
+
+Example:
+
+```js
+setTimeout(() => {
+  console.log("Hello");
+}, 1000);
+```
+
+Conceptually:
+
+```text
+setTimeout()
+     ↓
+Browser Timer API
+     ↓
+Wait until timer expires
+     ↓
+Callback becomes eligible
+     ↓
+Task Queue
+     ↓
+Event Loop
+     ↓
+Call Stack
+```
+
+> ⚠️ `setTimeout()` does not put the callback directly onto the Call Stack.
+
+---
+
+# 5. Task Queue
+
+The **Task Queue** contains callbacks that are ready to execute as tasks.
+
+It is also commonly called the:
+
+```text
+Macrotask Queue
+```
+
+Examples can include callbacks associated with:
+
+```js
+setTimeout()
+
+setInterval()
+
+DOM events
+
+Message events
+```
+
+Simplified:
+
+```text
+Browser API
+    ↓
+Callback ready
+    ↓
+Task Queue
+```
+
+The Event Loop eventually moves an eligible task onto the Call Stack when appropriate.
+
+---
+
+# 6. Microtask Queue
+
+The **Microtask Queue** contains microtasks that need to run after the current synchronous execution completes.
+
+Common sources include:
+
+```js
+Promise.then()
+
+Promise.catch()
+
+Promise.finally()
+
+queueMicrotask()
+```
+
+Example:
+
+```js
+Promise.resolve().then(() => {
+  console.log("Promise");
+});
+```
+
+The callback goes to the Microtask Queue.
+
+```text
+Promise resolves
+      ↓
+.then() callback
+      ↓
+Microtask Queue
+```
+
+---
+
+# 7. Macrotasks / Tasks
+
+The term **macrotask** is commonly used in interview discussions, while the HTML specification generally uses the term **task**.
+
+For practical interview purposes:
+
+```text
+Macrotask ≈ Task
+```
+
+Examples:
+
+```js
+setTimeout()
+
+setInterval()
+
+DOM events
+```
+
+The important distinction is:
+
+```text
+Microtasks
+    ↓
+Higher scheduling priority after current task
+
+Tasks
+    ↓
+Next unit of event-loop work
+```
+
+> ⚠️ Do not memorize "microtasks always execute before everything." The precise model is that after a task's JavaScript execution completes, the microtask queue is processed before the browser proceeds to the next task, with rendering occurring according to the browser's scheduling rules.
+
+---
+
+# 8. Event Loop
+
+## Definition
+
+The Event Loop coordinates the execution of queued asynchronous work with the Call Stack.
+
+A simplified model:
+
+```text
+           Call Stack
+               │
+               ▼
+       Current task finishes
+               │
+               ▼
+       Drain Microtasks
+               │
+               ▼
+      Browser may render
+               │
+               ▼
+        Next eligible task
+               │
+               ▼
+           Call Stack
+```
+
+The Event Loop repeatedly performs this type of coordination.
+
+---
+
+# 9. Basic Execution Order
+
+The most important interview rule:
+
+```text
+1. Execute synchronous JavaScript
+2. Finish the current task
+3. Drain the Microtask Queue
+4. Browser may perform rendering/update steps
+5. Execute the next eligible task
+6. Repeat
+```
+
+For basic interview questions, remember:
+
+```text
+Synchronous code
+      ↓
+Microtasks
+      ↓
+Tasks / Macrotasks
+```
+
+---
+
+# 10. Promise Callbacks
+
+Promise reactions such as:
+
+```js
+then()
+
+catch()
+
+finally()
+```
+
+run as **microtasks** when the corresponding Promise settles.
+
+Example:
+
+```js
+console.log("A");
+
+Promise.resolve().then(() => {
+  console.log("B");
+});
+
+console.log("C");
+```
+
+Output:
+
+```text
+A
+C
+B
+```
+
+Why?
+
+```text
+console.log("A")
+      ↓
+Promise callback queued
+      ↓
+console.log("C")
+      ↓
+Synchronous code finishes
+      ↓
+Microtask runs
+      ↓
+console.log("B")
+```
+
+---
+
+# 11. setTimeout
+
+`setTimeout()` schedules a callback as a task after the specified delay has elapsed.
+
+Example:
 
 ```js
 console.log("A");
 
 setTimeout(() => {
-    console.log("B");
+  console.log("B");
+}, 0);
+
+console.log("C");
+```
+
+Output:
+
+```text
+A
+C
+B
+```
+
+Even with:
+
+```js
+setTimeout(fn, 0);
+```
+
+the callback does not execute immediately.
+
+It must wait for:
+
+```text
+Current synchronous execution
+        ↓
+Microtasks
+        ↓
+Eligible task
+```
+
+> ⚠️ **Important:** `0ms` means no intentional timer delay, not "execute immediately."
+
+---
+
+# 12. setInterval
+
+`setInterval()` schedules a callback repeatedly.
+
+Example:
+
+```js
+setInterval(() => {
+  console.log("Hello");
+}, 1000);
+```
+
+Conceptually:
+
+```text
+Timer expires
+    ↓
+Callback becomes eligible
+    ↓
+Task
+    ↓
+Execute callback
+    ↓
+Wait for next interval
+    ↓
+Repeat
+```
+
+Clear it using:
+
+```js
+const id = setInterval(() => {
+  console.log("Running");
+}, 1000);
+
+clearInterval(id);
+```
+
+> ⚠️ `setInterval()` does not guarantee that callbacks execute exactly every N milliseconds. The callback must still wait for the event loop and available execution time.
+
+---
+
+# 13. queueMicrotask
+
+`queueMicrotask()` explicitly schedules a microtask.
+
+```js
+console.log("A");
+
+queueMicrotask(() => {
+  console.log("B");
+});
+
+console.log("C");
+```
+
+Output:
+
+```text
+A
+C
+B
+```
+
+Compare:
+
+```js
+queueMicrotask(() => {
+  console.log("Microtask");
+});
+
+setTimeout(() => {
+  console.log("Task");
+}, 0);
+```
+
+Output:
+
+```text
+Microtask
+Task
+```
+
+---
+
+# 14. Microtasks vs Macrotasks
+
+| Microtask | Task / Macrotask |
+|---|---|
+| Promise callbacks | `setTimeout()` |
+| `catch()` | `setInterval()` |
+| `finally()` | Many DOM events |
+| `queueMicrotask()` | Other task sources |
+| Runs after current task | Runs as a later task |
+| Queue is drained before next task | Next task waits for microtasks |
+
+Example:
+
+```js
+setTimeout(() => {
+  console.log("Timer");
 }, 0);
 
 Promise.resolve().then(() => {
-    console.log("C");
+  console.log("Promise");
+});
+
+queueMicrotask(() => {
+  console.log("Microtask");
+});
+```
+
+Output:
+
+```text
+Promise
+Microtask
+Timer
+```
+
+---
+
+# 15. Browser Rendering
+
+The browser does more than execute JavaScript.
+
+It also needs to update what the user sees.
+
+A simplified rendering pipeline:
+
+```text
+JavaScript
+    ↓
+Style calculation
+    ↓
+Layout
+    ↓
+Paint
+    ↓
+Composite
+```
+
+The exact browser pipeline is more complex and implementation-dependent.
+
+The important interview concept is:
+
+> The browser must get opportunities to perform rendering between pieces of work.
+
+---
+
+## Rendering Is Not a JavaScript Queue
+
+Do not think:
+
+```text
+Microtask Queue
+Task Queue
+Render Queue
+```
+
+as three equivalent JavaScript queues.
+
+Rendering is part of the browser's rendering/update process and is scheduled by the browser around event-loop work.
+
+---
+
+# 16. Event Loop and Rendering
+
+Consider:
+
+```js
+button.addEventListener("click", () => {
+  element.textContent = "Loading...";
+
+  heavyCalculation();
+
+  element.textContent = "Done";
+});
+```
+
+The browser may not visually show `"Loading..."` before `heavyCalculation()` finishes because the JavaScript task is still running.
+
+Conceptually:
+
+```text
+Click task starts
+      ↓
+DOM changed to "Loading..."
+      ↓
+Heavy JavaScript
+      ↓
+DOM changed to "Done"
+      ↓
+Task finishes
+      ↓
+Browser gets opportunity to render
+```
+
+The user may therefore see only:
+
+```text
+Done
+```
+
+rather than visually seeing:
+
+```text
+Loading...
+```
+
+Long-running JavaScript can cause:
+
+- UI freezes
+- Delayed animations
+- Delayed input response
+- Poor responsiveness
+
+---
+
+# 17. Complete Browser Event Loop Model
+
+A useful mental model:
+
+```text
+                         BROWSER
+                            │
+                            ▼
+                     JavaScript Task
+                            │
+                            ▼
+                      Call Stack
+                            │
+                            ▼
+                   Synchronous Code
+                            │
+                            ▼
+                    Task completes
+                            │
+                            ▼
+                  Drain Microtasks
+                            │
+                            ▼
+                  Browser Update /
+                     Rendering
+                            │
+                            ▼
+                  Next Eligible Task
+                            │
+                            ▼
+                      Call Stack
+```
+
+The simplified cycle is:
+
+```text
+Task
+ ↓
+Synchronous JavaScript
+ ↓
+Microtasks
+ ↓
+Rendering opportunity
+ ↓
+Next Task
+ ↓
+Repeat
+```
+
+> ⚠️ Rendering is browser-scheduled. Do not assume the browser renders after every single JavaScript statement or after every microtask.
+
+---
+
+# 18. Output-Based Questions
+
+For interviews, the most important skill in this phase is **output prediction**.
+
+When you see:
+
+```js
+console.log()
+
+Promise.resolve().then()
+
+queueMicrotask()
+
+setTimeout()
+
+setInterval()
+```
+
+don't guess.
+
+Trace the execution.
+
+## Output Question Strategy
+
+### Step 1 — Mark synchronous code
+
+```text
+SYNC
+```
+
+### Step 2 — Identify microtasks
+
+Look for:
+
+```js
+Promise.then()
+Promise.catch()
+Promise.finally()
+queueMicrotask()
+```
+
+### Step 3 — Identify tasks
+
+Look for:
+
+```js
+setTimeout()
+setInterval()
+DOM events
+```
+
+### Step 4 — Execute synchronous code first
+
+### Step 5 — Drain microtasks
+
+### Step 6 — Process the next task
+
+---
+
+# 19. Output Question 1
+
+```js
+console.log("A");
+
+setTimeout(() => {
+  console.log("B");
+}, 0);
+
+Promise.resolve().then(() => {
+  console.log("C");
 });
 
 console.log("D");
 ```
 
-**Trace**
-| Step | Action | Output so far |
-|---|---|---|
-| 1 | `console.log("A")` runs sync | `A` |
-| 2 | `setTimeout` callback handed to Web API, timer starts, **macrotask queue** gets it once timer fires | — |
-| 3 | `Promise.resolve().then(...)` — callback added to **microtask queue** | — |
-| 4 | `console.log("D")` runs sync | `A D` |
-| 5 | Call stack empty → drain microtask queue → runs `console.log("C")` | `A D C` |
-| 6 | Microtask queue empty → event loop takes next macrotask → runs `console.log("B")` | `A D C B` |
+### Answer
 
-**Result**
+```text
+A
+D
+C
+B
 ```
+
+### Explanation
+
+Synchronous:
+
+```text
+A
+D
+```
+
+Promise callback:
+
+```text
+C
+```
+
+Timer task:
+
+```text
+B
+```
+
+Therefore:
+
+```text
 A
 D
 C
@@ -69,309 +883,1079 @@ B
 
 ---
 
-## 1. Microtasks vs Macrotasks
+# 20. Output Question 2
 
-**Recall**
-
-| | Microtasks | Macrotasks (a.k.a. "tasks") |
-|---|---|---|
-| Sources | `Promise.then/catch/finally`, `async/await` continuations, `queueMicrotask` | `setTimeout`, `setInterval`, `setImmediate` (Node), DOM events, `fetch` callback dispatch |
-| When they run | Immediately after current sync code, **before** any macrotask | One at a time, only after the microtask queue is fully empty |
-| Queue drained fully each cycle? | ✅ yes, entirely, before moving on | ❌ only ONE macrotask runs per event loop cycle |
-
-**Code**
-```js
-console.log("1");
-setTimeout(() => console.log("2 - macro"), 0);
-Promise.resolve().then(() => console.log("3 - micro"));
-Promise.resolve().then(() => console.log("4 - micro"));
-console.log("5");
-// 1, 5, 3 - micro, 4 - micro, 2 - macro
-// BOTH microtasks run before the ONE macrotask, regardless of order registered
-```
-
-**Explain**
-Microtasks can **starve** macrotasks if they keep scheduling more microtasks — the event loop won't touch the macrotask queue until the microtask queue is completely empty, even if that takes a while.
-
----
-
-## 2. `setTimeout`
-
-**Code**
-```js
-setTimeout(() => console.log("fires after ~0ms, but AFTER all sync + microtasks"), 0);
-console.log("sync");
-Promise.resolve().then(() => console.log("micro"));
-// sync, micro, fires after ~0ms...
-```
-
-**Explain**
-`setTimeout(fn, 0)` does **not** mean "run immediately" — it means "run as soon as possible **after** the minimum delay, once the call stack is clear and all microtasks are drained." The delay is a **minimum**, not a guarantee — if the stack is busy, the callback waits longer. Browsers also enforce a **minimum ~4ms** clamp for nested timeouts.
-
----
-
-## 3. `setInterval`
-
-**Code**
-```js
-let count = 0;
-const id = setInterval(() => {
-  console.log("tick", ++count);
-  if (count === 3) clearInterval(id); // always clear intervals, or they run forever
-}, 1000);
-```
-
-**Explain**
-- Each tick is a **separate macrotask**, queued the same way as `setTimeout`.
-- If the main thread is busy (a long synchronous task) when a tick is due, that tick is **delayed**, not queued twice — `setInterval` does not guarantee perfectly even spacing, only "at least this much time has passed."
-- Forgetting `clearInterval` is a classic **memory leak** source, especially in React `useEffect` without cleanup.
-
----
-
-## 4. `queueMicrotask`
-
-**Code**
-```js
-console.log("1");
-setTimeout(() => console.log("2 - macro"), 0);
-queueMicrotask(() => console.log("3 - explicit micro"));
-Promise.resolve().then(() => console.log("4 - promise micro"));
-console.log("5");
-// 1, 5, 3 - explicit micro, 4 - promise micro, 2 - macro
-```
-
-**Explain**
-`queueMicrotask(fn)` schedules a microtask directly, without needing a Promise wrapper — useful when you want microtask-priority timing (run right after current code, before rendering/macrotasks) without the overhead of creating a Promise.
-
----
-
-## 5. Rendering — where it fits in
-
-**Understand**
-The browser tries to **paint** the updated UI at specific points — never in the middle of running JS (JS is single-threaded, so paint has to wait its turn).
-
-**Recall — simplified per-cycle order**
-```
-1. Run one macrotask (or handle one event)
-2. Drain ALL microtasks completely
-3. Browser MAY render a frame here (roughly every ~16.6ms for 60fps, if a repaint is due)
-4. Repeat
-```
-
-**Code**
-```js
-button.addEventListener("click", () => {
-  element.style.color = "red";     // change 1
-  // browser does NOT repaint yet — still inside this synchronous handler
-  element.style.color = "blue";     // change 2 — overwrites change 1 before any paint happened
-});
-// Only "blue" is ever visibly painted — the browser batches this into ONE repaint after the handler finishes
-```
-
-**Explain**
-Rendering happens **between** macrotasks — never mid-script. This is why rapid synchronous DOM changes in a single event handler don't cause visible flickering: the browser only paints the **final** state once the handler (and its microtasks) finish. It's also why a long synchronous loop **freezes the UI** — no repaint can happen until the call stack clears.
-
----
-
-## 6. Full Browser Event Loop Diagram
-
-```
-        ┌─────────────────────────────────────────────┐
-        │                 Call Stack                   │
-        │   (sync code runs here, one frame at a time)  │
-        └───────────────────┬───────────────────────────┘
-                             │  stack empties
-                             ▼
-        ┌─────────────────────────────────────────────┐
-        │             Microtask Queue                   │
-        │  Promise .then/.catch/.finally, async/await,  │
-        │  queueMicrotask                                │
-        │  → drained COMPLETELY, incl. newly added ones   │
-        └───────────────────┬───────────────────────────┘
-                             │  queue fully empty
-                             ▼
-        ┌─────────────────────────────────────────────┐
-        │        Browser MAY render a frame here         │
-        └───────────────────┬───────────────────────────┘
-                             ▼
-        ┌─────────────────────────────────────────────┐
-        │             Macrotask Queue                    │
-        │  setTimeout, setInterval, DOM events, fetch     │
-        │  dispatch                                        │
-        │  → ONE task picked, pushed to call stack          │
-        └───────────────────┬───────────────────────────┘
-                             │
-                             └──────────────► back to Call Stack, repeat forever
-```
-
-**Explain**
-Web APIs (`setTimeout`, `fetch`, DOM event listeners) live **outside** the JS engine entirely — provided by the browser (or Node's libuv). They do the actual waiting; once done, they simply drop a callback into the correct queue. The Event Loop's only job is: *"is the stack empty? drain microtasks, maybe render, then grab one macrotask."*
-
----
-
-## 🧪 Output Prediction Practice
-
-Predict each before checking the answer.
-
-**Q1 — Basics**
-```js
-console.log(1);
-setTimeout(() => console.log(2));
-Promise.resolve().then(() => console.log(3));
-console.log(4);
-```
-<details><summary>Answer</summary>
-
-```
-1
-4
-3
-2
-```
-</details>
-
----
-
-**Q2 — Chained microtasks**
-```js
-console.log("start");
-Promise.resolve()
-  .then(() => console.log("A"))
-  .then(() => console.log("B"));
-Promise.resolve().then(() => console.log("C"));
-console.log("end");
-```
-<details><summary>Answer</summary>
-
-```
-start
-end
-A
-C
-B
-```
-Reasoning: two separate `.then` chains — first links of both chains (`A`, `C`) queue before either chain's second link (`B`). `A` was registered first, so it runs first; its `.then(B)` only gets queued AFTER `A` runs, landing behind `C` which was already waiting.
-</details>
-
----
-
-**Q3 — Nested setTimeout vs Promise**
-```js
-setTimeout(() => console.log("timeout 1"), 0);
-setTimeout(() => {
-  console.log("timeout 2");
-  Promise.resolve().then(() => console.log("micro inside timeout"));
-}, 0);
-Promise.resolve().then(() => console.log("micro 1"));
-```
-<details><summary>Answer</summary>
-
-```
-micro 1
-timeout 1
-timeout 2
-micro inside timeout
-```
-Reasoning: all microtasks queued during sync execution run first. Then macrotasks run ONE AT A TIME, and each macrotask's own microtasks are drained before the NEXT macrotask starts.
-</details>
-
----
-
-**Q4 — async/await mixed in**
 ```js
 console.log("1");
 
-async function foo() {
+Promise.resolve().then(() => {
   console.log("2");
-  await Promise.resolve();
-  console.log("3");
-}
-foo();
+});
 
-setTimeout(() => console.log("4"), 0);
+console.log("3");
+
+setTimeout(() => {
+  console.log("4");
+}, 0);
 
 console.log("5");
 ```
-<details><summary>Answer</summary>
 
-```
+### Answer
+
+```text
 1
-2
-5
 3
+5
+2
 4
 ```
-Reasoning: `foo()` runs synchronously up to `await`. Code after `await` becomes a microtask, so it waits behind nothing else queued yet, but AFTER the remaining synchronous code (`5`) finishes. `4` is a macrotask — runs last.
-</details>
+
+Synchronous:
+
+```text
+1
+3
+5
+```
+
+Microtask:
+
+```text
+2
+```
+
+Task:
+
+```text
+4
+```
 
 ---
 
-**Q5 — setInterval + microtask starvation risk**
+# 21. Output Question 3
+
 ```js
-let i = 0;
-function loop() {
-  i++;
-  if (i < 3) Promise.resolve().then(loop); // recursively schedules microtasks
-  console.log("i =", i);
-}
-loop();
-console.log("after loop()");
-```
-<details><summary>Answer</summary>
+setTimeout(() => {
+  console.log("A");
+}, 0);
 
+Promise.resolve().then(() => {
+  console.log("B");
+});
+
+queueMicrotask(() => {
+  console.log("C");
+});
+
+console.log("D");
 ```
-i = 1
-after loop()
-i = 2
-i = 3
+
+### Answer
+
+```text
+D
+B
+C
+A
 ```
-Reasoning: first call is synchronous. Each subsequent call is scheduled as a microtask,
-which runs before ANY macrotask, but still after the initially running sync code (`after loop()`).
-This is exactly how microtask recursion can "starve" macrotasks like setTimeout if it never stops.
-</details>
+
+Execution:
+
+```text
+Synchronous
+    ↓
+D
+
+Microtasks
+    ↓
+B
+C
+
+Task
+    ↓
+A
+```
 
 ---
 
-**Q6 — Mixed everything (hardest)**
+# 22. Output Question 4
+
 ```js
 console.log("A");
 
-setTimeout(() => console.log("B"), 0);
+setTimeout(() => {
+  console.log("B");
 
-new Promise((resolve) => {
-  console.log("C");     // executor runs SYNCHRONOUSLY, immediately
-  resolve();
-}).then(() => console.log("D"));
+  Promise.resolve().then(() => {
+    console.log("C");
+  });
+}, 0);
 
-queueMicrotask(() => console.log("E"));
+Promise.resolve().then(() => {
+  console.log("D");
+});
 
-async function f() {
-  console.log("F");
-  await null;
-  console.log("G");
-}
-f();
-
-console.log("H");
+console.log("E");
 ```
-<details><summary>Answer</summary>
 
-```
+### Answer
+
+```text
 A
-C
-F
-H
-D
 E
-G
+D
+B
+C
+```
+
+When the timer task runs:
+
+```text
 B
 ```
-Reasoning:
-- Sync pass: A → C (Promise executor runs immediately, not deferred) → F (async fn body before await) → H
-- Microtask queue filled in this order during sync pass: [D, E, G]
-- Macrotask (B) runs only after ALL of those drain.
-</details>
+
+is synchronous inside that task.
+
+Then the Promise callback becomes a microtask:
+
+```text
+C
+```
+
+So:
+
+```text
+A
+E
+D
+B
+C
+```
 
 ---
 
-<p align="center"><i>Next → <code>11-error-handling.md</code></i></p>
+# 23. Output Question 5
+
+```js
+console.log("A");
+
+Promise.resolve().then(() => {
+  console.log("B");
+
+  Promise.resolve().then(() => {
+    console.log("C");
+  });
+});
+
+console.log("D");
+```
+
+### Answer
+
+```text
+A
+D
+B
+C
+```
+
+The second Promise callback is queued while the first microtask is running. It runs when the microtask queue continues draining.
+
+---
+
+# 24. Output Question 6
+
+```js
+console.log("1");
+
+setTimeout(() => {
+  console.log("2");
+
+  queueMicrotask(() => {
+    console.log("3");
+  });
+
+  console.log("4");
+}, 0);
+
+Promise.resolve().then(() => {
+  console.log("5");
+});
+
+console.log("6");
+```
+
+### Answer
+
+```text
+1
+6
+5
+2
+4
+3
+```
+
+Execution:
+
+```text
+First task:
+1
+6
+
+Microtask:
+5
+
+Timer task:
+2
+4
+
+Microtask created inside timer:
+3
+```
+
+---
+
+# 25. Output Question 7
+
+```js
+setTimeout(() => {
+  console.log("A");
+}, 0);
+
+setTimeout(() => {
+  console.log("B");
+}, 0);
+
+Promise.resolve().then(() => {
+  console.log("C");
+});
+
+Promise.resolve().then(() => {
+  console.log("D");
+});
+
+console.log("E");
+```
+
+### Answer
+
+```text
+E
+C
+D
+A
+B
+```
+
+---
+
+# 26. Output Question 8
+
+```js
+console.log("A");
+
+setTimeout(() => {
+  console.log("B");
+}, 0);
+
+queueMicrotask(() => {
+  console.log("C");
+
+  queueMicrotask(() => {
+    console.log("D");
+  });
+});
+
+console.log("E");
+```
+
+### Answer
+
+```text
+A
+E
+C
+D
+B
+```
+
+A microtask can create another microtask. The newly created microtask is processed during the same microtask-draining phase.
+
+---
+
+# 27. Output Question 9
+
+```js
+setTimeout(() => {
+  console.log("A");
+}, 0);
+
+Promise.resolve().then(() => {
+  console.log("B");
+
+  setTimeout(() => {
+    console.log("C");
+  }, 0);
+});
+
+console.log("D");
+```
+
+### Answer
+
+```text
+D
+B
+A
+C
+```
+
+The first timer was scheduled before the second timer was created.
+
+---
+
+# 28. Output Question 10
+
+```js
+console.log("1");
+
+setTimeout(() => {
+  console.log("2");
+
+  Promise.resolve().then(() => {
+    console.log("3");
+  });
+
+  setTimeout(() => {
+    console.log("4");
+  }, 0);
+}, 0);
+
+Promise.resolve().then(() => {
+  console.log("5");
+
+  queueMicrotask(() => {
+    console.log("6");
+  });
+});
+
+console.log("7");
+```
+
+### Answer
+
+```text
+1
+7
+5
+6
+2
+3
+4
+```
+
+### Trace
+
+Initial task:
+
+```text
+1
+7
+```
+
+Microtask:
+
+```text
+5
+```
+
+Microtask created by that microtask:
+
+```text
+6
+```
+
+First timer task:
+
+```text
+2
+```
+
+Microtask created inside timer:
+
+```text
+3
+```
+
+Second timer task:
+
+```text
+4
+```
+
+Final:
+
+```text
+1
+7
+5
+6
+2
+3
+4
+```
+
+---
+
+# 29. Nested Microtasks
+
+Consider:
+
+```js
+Promise.resolve().then(() => {
+  console.log("A");
+
+  Promise.resolve().then(() => {
+    console.log("B");
+  });
+
+  console.log("C");
+});
+```
+
+Output:
+
+```text
+A
+C
+B
+```
+
+Why?
+
+```text
+Microtask 1
+   ↓
+A
+   ↓
+queue Microtask 2
+   ↓
+C
+   ↓
+Microtask 1 finishes
+   ↓
+Microtask 2
+   ↓
+B
+```
+
+---
+
+## Microtask Starvation
+
+Because microtasks can schedule more microtasks:
+
+```js
+function loop() {
+  queueMicrotask(loop);
+}
+
+loop();
+```
+
+the microtask queue can continuously generate more work.
+
+```text
+Microtask
+   ↓
+Microtask
+   ↓
+Microtask
+   ↓
+Microtask
+   ↓
+...
+```
+
+This can cause **microtask starvation**.
+
+> ⚠️ Do not create unbounded recursive microtasks in real applications.
+
+---
+
+# 30. Nested setTimeout
+
+Consider:
+
+```js
+setTimeout(() => {
+  console.log("A");
+
+  setTimeout(() => {
+    console.log("B");
+  }, 0);
+}, 0);
+```
+
+Conceptually:
+
+```text
+Initial task
+    ↓
+Timer A becomes eligible
+    ↓
+Task A executes
+    ↓
+Timer B is scheduled
+    ↓
+Task A finishes
+    ↓
+Later task
+    ↓
+B
+```
+
+Output:
+
+```text
+A
+B
+```
+
+The second timer does not execute during the first timer's callback.
+
+---
+
+# 31. Common Event Loop Mistakes
+
+## Mistake 1 — Thinking setTimeout(..., 0) Runs Immediately
+
+Incorrect:
+
+```text
+setTimeout(..., 0)
+↓
+Immediately execute
+```
+
+Correct:
+
+```text
+setTimeout(..., 0)
+↓
+Timer becomes eligible
+↓
+Task Queue
+↓
+Event Loop
+↓
+Call Stack
+```
+
+## Mistake 2 — Thinking Promises Run Immediately
+
+Incorrect:
+
+```text
+Promise.resolve().then(callback)
+↓
+Run callback now
+```
+
+Correct:
+
+```text
+Promise settles
+     ↓
+Callback scheduled as microtask
+     ↓
+Current synchronous execution finishes
+     ↓
+Microtask executes
+```
+
+## Mistake 3 — Thinking `await` Creates a Normal Synchronous Pause
+
+```js
+async function test() {
+  console.log("A");
+
+  await Promise.resolve();
+
+  console.log("B");
+}
+
+test();
+
+console.log("C");
+```
+
+Output:
+
+```text
+A
+C
+B
+```
+
+The continuation after `await` runs asynchronously as a Promise reaction/microtask.
+
+## Mistake 4 — Thinking All Async Operations Are Equal
+
+For interview questions, distinguish:
+
+```text
+Promise callback → Microtask
+queueMicrotask() → Microtask
+setTimeout() → Task
+setInterval() → Task
+```
+
+## Mistake 5 — Thinking Rendering Happens After Every Statement
+
+The browser does not render after every JavaScript statement.
+
+A long-running JavaScript task can prevent rendering from happening during that task.
+
+## Mistake 6 — Thinking setInterval() Is Perfectly Precise
+
+```js
+setInterval(callback, 1000);
+```
+
+does not guarantee:
+
+```text
+Exactly every 1000ms
+```
+
+The callback still depends on:
+
+- Event loop availability
+- Other JavaScript work
+- Browser scheduling
+- Runtime constraints
+
+## Mistake 7 — Ignoring Microtasks Created Inside Tasks
+
+```js
+setTimeout(() => {
+  console.log("A");
+
+  Promise.resolve().then(() => {
+    console.log("B");
+  });
+
+  console.log("C");
+}, 0);
+```
+
+Output:
+
+```text
+A
+C
+B
+```
+
+---
+
+# 32. Interview-Level Mental Model
+
+When an interviewer gives you:
+
+```js
+console.log()
+
+Promise.resolve().then()
+
+queueMicrotask()
+
+setTimeout()
+
+setInterval()
+```
+
+build this table mentally:
+
+| Code | Category | When does it run? |
+|---|---|---|
+| Normal `console.log()` | Synchronous | Immediately on Call Stack |
+| `Promise.then()` | Microtask | After current task |
+| `Promise.catch()` | Microtask | After current task |
+| `Promise.finally()` | Microtask | After current task |
+| `queueMicrotask()` | Microtask | After current task |
+| `setTimeout()` | Task | Later task |
+| `setInterval()` | Task | Repeated eligible tasks |
+
+Then follow:
+
+```text
+1. Synchronous
+2. Microtasks
+3. Rendering opportunity
+4. Next task
+```
+
+---
+
+# 33. Quick Revision
+
+## The Core Chain
+
+```text
+Synchronous JavaScript
+        ↓
+Call Stack
+        ↓
+Browser APIs
+        ↓
+Queues
+        ↓
+Event Loop
+        ↓
+Call Stack
+```
+
+## Microtasks
+
+```js
+Promise.then()
+
+Promise.catch()
+
+Promise.finally()
+
+queueMicrotask()
+```
+
+Mental model:
+
+```text
+Current task finishes
+        ↓
+Drain microtasks
+```
+
+## Tasks / Macrotasks
+
+Common examples:
+
+```js
+setTimeout()
+
+setInterval()
+
+DOM event callbacks
+```
+
+Mental model:
+
+```text
+Task
+ ↓
+Synchronous code
+ ↓
+Microtasks
+ ↓
+Next task
+```
+
+## Output Prediction Formula
+
+When you see:
+
+```js
+console.log();
+
+Promise.resolve().then();
+
+queueMicrotask();
+
+setTimeout();
+```
+
+think:
+
+```text
+SYNC
+ ↓
+MICROTASKS
+ ↓
+TASKS
+```
+
+Example:
+
+```js
+console.log("A");
+
+setTimeout(() => {
+  console.log("B");
+}, 0);
+
+Promise.resolve().then(() => {
+  console.log("C");
+});
+
+console.log("D");
+```
+
+Answer:
+
+```text
+A
+D
+C
+B
+```
+
+## Event Loop Mental Model
+
+```text
+                 ┌─────────────────┐
+                 │   Call Stack    │
+                 └────────┬────────┘
+                          │
+                          ▼
+                 Current Task Runs
+                          │
+                          ▼
+                   Task Finishes
+                          │
+                          ▼
+                ┌──────────────────┐
+                │ Microtask Queue  │
+                └────────┬─────────┘
+                         │
+                         ▼
+                  Drain All Ready
+                     Microtasks
+                         │
+                         ▼
+                 Browser May Render
+                         │
+                         ▼
+                Next Eligible Task
+                         │
+                         ▼
+                    Call Stack
+```
+
+---
+
+# 34. Interview Questions
+
+Before considering Phase 10 complete, you should be able to answer these without looking at the notes.
+
+## Event Loop Fundamentals
+
+1. What is the Event Loop?
+2. Why does JavaScript need an Event Loop?
+3. Is JavaScript single-threaded?
+4. What is the Call Stack?
+5. What are Web APIs?
+6. What is the Task Queue?
+7. What is the Microtask Queue?
+8. What is a macrotask?
+9. What is the difference between a task and a microtask?
+10. What role does the Event Loop play?
+
+## Promises and Microtasks
+
+11. Why do Promise callbacks run asynchronously?
+12. Which queue handles Promise callbacks?
+13. Is `Promise.then()` a microtask or a macrotask?
+14. What is `queueMicrotask()`?
+15. What happens if a microtask creates another microtask?
+16. What is microtask starvation?
+17. Why do Promise callbacks generally execute before timer callbacks?
+
+## Timers
+
+18. What does `setTimeout(fn, 0)` actually mean?
+19. Does `setTimeout(fn, 0)` execute immediately?
+20. Is `setTimeout()` a microtask or a task?
+21. Is `setInterval()` guaranteed to execute exactly at its specified interval?
+22. What happens when a timer callback schedules a Promise callback?
+23. What happens when a timer callback schedules another timer?
+
+## Rendering
+
+24. How does JavaScript execution affect browser rendering?
+25. Can a long-running JavaScript task block rendering?
+26. Does the browser render after every JavaScript statement?
+27. What is the relationship between the Event Loop and rendering?
+28. Why can heavy synchronous JavaScript make a UI appear frozen?
+
+## Output Questions
+
+29. Predict the output:
+
+```js
+console.log("A");
+
+setTimeout(() => {
+  console.log("B");
+}, 0);
+
+Promise.resolve().then(() => {
+  console.log("C");
+});
+
+console.log("D");
+```
+
+30. Predict the output:
+
+```js
+console.log("1");
+
+Promise.resolve().then(() => {
+  console.log("2");
+});
+
+console.log("3");
+
+setTimeout(() => {
+  console.log("4");
+}, 0);
+
+console.log("5");
+```
+
+31. Predict the output:
+
+```js
+setTimeout(() => {
+  console.log("A");
+}, 0);
+
+queueMicrotask(() => {
+  console.log("B");
+});
+
+Promise.resolve().then(() => {
+  console.log("C");
+});
+
+console.log("D");
+```
+
+32. Predict the output:
+
+```js
+setTimeout(() => {
+  console.log("A");
+
+  Promise.resolve().then(() => {
+    console.log("B");
+  });
+}, 0);
+
+Promise.resolve().then(() => {
+  console.log("C");
+});
+
+console.log("D");
+```
+
+33. Predict the output:
+
+```js
+console.log("A");
+
+queueMicrotask(() => {
+  console.log("B");
+
+  queueMicrotask(() => {
+    console.log("C");
+  });
+});
+
+setTimeout(() => {
+  console.log("D");
+}, 0);
+
+console.log("E");
+```
+
+34. Predict the output:
+
+```js
+setTimeout(() => {
+  console.log("A");
+}, 0);
+
+Promise.resolve().then(() => {
+  console.log("B");
+
+  setTimeout(() => {
+    console.log("C");
+  }, 0);
+});
+
+console.log("D");
+```
+
+---
+
+# 🧠 Final Mental Model
+
+The most important thing to remember from Phase 10 is:
+
+```text
+                JAVASCRIPT
+                    │
+                    ▼
+               Call Stack
+                    │
+                    ▼
+            Execute Current Task
+                    │
+                    ▼
+             Task Finishes
+                    │
+                    ▼
+          Drain Microtask Queue
+                    │
+                    ▼
+          Browser May Render
+                    │
+                    ▼
+          Next Eligible Task
+                    │
+                    ▼
+               Call Stack
+```
+
+And the most important priority rule:
+
+```text
+┌─────────────────────────┐
+│ 1. Synchronous JavaScript│
+└────────────┬────────────┘
+             ↓
+┌─────────────────────────┐
+│ 2. Microtasks           │
+│    Promise callbacks    │
+│    queueMicrotask()     │
+└────────────┬────────────┘
+             ↓
+┌─────────────────────────┐
+│ 3. Rendering opportunity│
+└────────────┬────────────┘
+             ↓
+┌─────────────────────────┐
+│ 4. Next Task            │
+│    setTimeout()         │
+│    setInterval()        │
+│    DOM events           │
+└─────────────────────────┘
+```
+
+> ⭐ **For interviews, don't memorize output answers. Learn to classify every operation as synchronous, microtask, or task, then trace the queues step by step.**
+
+> 🔥 **The key interview skill is being able to look at 10–20 lines of asynchronous JavaScript and explain exactly why every line executes in its particular order.**
